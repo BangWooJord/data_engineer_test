@@ -13,7 +13,7 @@ object_key = 'files_list.data'
 
 s3 = boto3.resource('s3', config=Config(signature_version=UNSIGNED))
 
-try:
+try: #downloading initial file
     s3.Bucket(bucket_name).download_file(object_key, 'files_list.data')
 except botocore.exceptions.ClientError as e:
     if e:
@@ -28,15 +28,13 @@ connection = pyodbc.connect(r'Driver={SQL Server};'
                             r'Trusted_Connection=yes;')
 cursor = connection.cursor()
 
-# cursor.execute("INSERT INTO songs(artist_name, title, year, release, ingestion_time) "
-#                "VALUES('Me', 'Cool title', 2007, 'Release mm', '"
-#                + datetime.now().strftime("%Y/%m/%d %H:%M:%S") + "' )")
-
+# reading initial file
 list_file = open('files_list.data', 'r')
 files = list_file.readlines()
 
 for file_name in files:
     file_name = file_name.strip()
+    # downloading  json files
     s3.Bucket(bucket_name).download_file(file_name, 'json/' + file_name)
     data_file = open('json/' + file_name)
     data = json.load(data_file)
@@ -44,9 +42,11 @@ for file_name in files:
         if data_obj['type'] == 'song' or data_obj['type'] == 'app' or data_obj['type'] == 'movie':
             query = 'INSERT INTO '
             query += data_obj['type'] + 's('
+            # putting keys into a query like "INSERT INTO songs(key, key, key)
             for key in data_obj['data'].keys():
                 query += key + ','
 
+            # adding additional columns, that are not listed in a json file
             if data_obj['type'] == 'song':
                 query += 'ingestion_time'
             elif data_obj['type'] == 'app':
@@ -55,9 +55,10 @@ for file_name in files:
                 query += 'original_title_normalized'
 
             query += ') VALUES('
+
+            # putting values into a query
             for key in data_obj['data'].keys():
                 query += 'N\'' + str(data_obj['data'][key]).replace("\'", "\'\'") + '\'' + ','
-
             if data_obj['type'] == 'song':
                 query += '\'' + datetime.now().strftime("%Y/%m/%d %H:%M:%S") + '\''
             elif data_obj['type'] == 'app':
@@ -68,7 +69,9 @@ for file_name in files:
                 normalized_title = normalized_title.replace(' ', '_')
                 normalized_title = normalized_title.lower()
                 query += '\'' + normalized_title + '\''
+
             query += ')'
+            # executing query
             cursor.execute(query)
 
 connection.commit()
